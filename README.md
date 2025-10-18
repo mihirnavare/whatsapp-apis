@@ -5,6 +5,6 @@ This repo provides a development server to create multiple whatsapp-web.js clien
 ## Quick start (docker-compose)
 
 1. Copy `.env.example` to `.env` and edit if desired.
-2. Build and run:
+2. open in devcontainer:
    ```bash
-   docker compose up --build
+   node start
