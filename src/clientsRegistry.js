@@ -181,7 +181,17 @@ async function sendMessage(clientId, phone, message, media) {
   if (!entry.client) throw new Error('client not initialized');
 
   const client = entry.client;
-  const jid = phone.includes('@') ? phone : `${phone}@c.us`;
+
+  // ✅ Use default country code if number does not start with a country code
+  const defaultCountryCode = process.env.DEFAULT_COUNTRY_CODE || '91';
+  let normalizedPhone = phone.toString().trim();
+
+  // Check if number starts with country code (assume if it starts with '+' or already 11+ digits)
+  if (!normalizedPhone.startsWith('+') && normalizedPhone.length <= 10) {
+    normalizedPhone = defaultCountryCode + normalizedPhone;
+  }
+
+  const jid = normalizedPhone.includes('@') ? normalizedPhone : `${normalizedPhone}@c.us`;
 
   if (media && media.base64 && media.mime) {
     const mediaObj = new MessageMedia(media.mime, media.base64, media.filename || `file_${Date.now()}`);
