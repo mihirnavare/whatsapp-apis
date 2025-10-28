@@ -1,13 +1,9 @@
 services:
   document-collection-backend:
     build:
-      context: ..
+      context: .
       dockerfile: ./Dockerfile
     env_file:
       - ./.env
-    volumes:
-      - ../:/app
     ports:
-      - "5005:5005"
-    depends_on:
-      - mongo
+      - "4999:4999"

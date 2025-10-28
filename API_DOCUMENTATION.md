@@ -34,7 +34,7 @@ Creates a new WhatsApp session and returns a client ID for subsequent operations
   "owner": "string (optional)"
 }
 ```
-
+/clients/start
 #### Request Headers
 ```
 X-Owner: string (optional)

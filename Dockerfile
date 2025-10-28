@@ -30,6 +30,12 @@ WORKDIR /app
 COPY requirements.txt* ./
 RUN if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi
 
+# Copy package.json and package-lock.json (if available)
+COPY package*.json ./
+
+# Install npm dependencies
+RUN npm install
+
 # Create necessary directories
 RUN mkdir -p /app/.wwebjs_auth /app/downloads /app/logs
 
@@ -41,6 +47,9 @@ ENV NODE_ENV=development
 
 # Create directories
 RUN mkdir -p .wwebjs_auth downloads logs
+
+# Copy application source code
+COPY . .
 
 EXPOSE 5005
 
