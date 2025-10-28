@@ -23,6 +23,9 @@ function createClientEntry(owner, expiryMs) {
   const clientId = uuidv4();
   const dataPathClient = path.join(DATA_DIR, clientId);
 
+  console.log(`[DEBUG] Creating client with clientId: ${clientId}`);
+  console.log(`[DEBUG] Using LocalAuth at: ${dataPathClient}`);
+  console.log(`[DEBUG] Puppeteer executablePath: ${process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium'}`);
   const client = new Client({
     authStrategy: new LocalAuth({ clientId }), // LocalAuth will store session under .wwebjs_local_auth/<clientId>
     puppeteer: {
@@ -33,12 +36,16 @@ function createClientEntry(owner, expiryMs) {
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
-        '--no-zygote',
-        '--single-process'
+        '--disable-gpu'
       ],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium'
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+      timeout: 60000
     },
-    takeoverOnConflict: true
+    takeoverOnConflict: true,
+    webVersionCache: {
+      type: 'remote',
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
+    }
   });
 
   const entry = {
@@ -53,14 +60,24 @@ function createClientEntry(owner, expiryMs) {
   };
 
   // Event handlers
+  client.on('loading_screen', (percent, message) => {
+    console.log(`[DEBUG] Client ${clientId} loading screen: ${percent}% - ${message}`);
+  });
+
+  client.on('change_state', (state) => {
+    console.log(`[DEBUG] Client ${clientId} state changed to: ${state}`);
+  });
+
   client.on('qr', async (qr) => {
+    console.log(`[DEBUG] QR event emitted for client ${clientId}`);
     try {
       const dataUrl = await qrcode.toDataURL(qr);
       entry.qrDataUrl = dataUrl;
       entry.status = 'qr';
       entry.lastSeen = Date.now();
+      console.log(`[DEBUG] QR code generated and stored for client ${clientId}`);
     } catch (e) {
-      console.error('QR to data url error', e);
+      console.error('[ERROR] QR to data url error', e);
     }
   });
 
@@ -68,27 +85,50 @@ function createClientEntry(owner, expiryMs) {
     entry.status = 'ready';
     entry.qrDataUrl = null;
     entry.lastSeen = Date.now();
-    console.log(`Client ${clientId} ready`);
+    console.log(`[DEBUG] Client ${clientId} ready`);
   });
 
   client.on('authenticated', () => {
     entry.status = 'authenticated';
     entry.lastSeen = Date.now();
+    console.log(`[DEBUG] Client ${clientId} authenticated`);
   });
 
   client.on('auth_failure', (msg) => {
-    console.warn(`Auth failure for client ${clientId}:`, msg);
+    console.warn(`[WARN] Auth failure for client ${clientId}:`, msg);
     entry.status = 'auth_failure';
     entry.lastSeen = Date.now();
   });
 
   client.on('disconnected', (reason) => {
-    console.log(`Client ${clientId} disconnected:`, reason);
+    console.log(`[DEBUG] Client ${clientId} disconnected:`, reason);
     entry.status = 'disconnected';
     entry.lastSeen = Date.now();
   });
 
-  client.initialize();
+  // Capture any unhandled errors from the client
+  client.on('error', (error) => {
+    console.error(`[ERROR] Client ${clientId} error:`, error);
+  });
+
+  // Listen for remote_session_saved event
+  client.on('remote_session_saved', () => {
+    console.log(`[DEBUG] Client ${clientId} remote session saved`);
+  });
+
+  try {
+    client.initialize();
+    console.log(`[DEBUG] client.initialize() called for clientId: ${clientId}`);
+    
+    // Add timeout to detect stuck initialization
+    setTimeout(() => {
+      if (entry.status === 'initializing') {
+        console.error(`[ERROR] Client ${clientId} stuck in initializing state for 30 seconds`);
+      }
+    }, 30000);
+  } catch (e) {
+    console.error(`[ERROR] Failed to initialize client ${clientId}:`, e);
+  }
   clients.set(clientId, entry);
   return entry;
 }
