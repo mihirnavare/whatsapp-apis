@@ -4,6 +4,7 @@ const qrcode = require('qrcode');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
+const { getExtensionFromMime, createZipArchive } = require('./utils');
 
 const DATA_DIR = path.resolve(process.cwd(), 'data'); // volume mounted to persist LocalAuth
 const DOWNLOADS_DIR = path.resolve(process.cwd(), 'src', 'downloads');
@@ -208,11 +209,315 @@ async function deleteClient(clientId) {
   return await stopClient(clientId);
 }
 
+/**
+ * Get chats according to time filter
+ * @param {string} clientId - Client ID
+ * @param {number|string} time - Hours (e.g., 1, 24, 48) or "all" for no filter
+ * @returns {Promise<Array>} - Array of chat IDs
+ */
+async function getChatsAccordingToTime(clientId, time) {
+  const entry = clients.get(clientId);
+  if (!entry) throw new Error('client not found');
+  if (entry.status !== 'ready') throw new Error('client not ready');
+
+  const client = entry.client;
+  
+  try {
+    console.log(`[DEBUG] Attempting to fetch chats for client ${clientId}`);
+    
+    // Alternative approach: Use pupPage to get chat data directly
+    let chats = [];
+    
+    try {
+      console.log(`[DEBUG] Trying alternative method using Store...`);
+      
+      // Access the internal store which is more reliable
+      const pupPage = client.pupPage;
+      
+      // Execute JavaScript in the WhatsApp Web context to get chats
+      const chatData = await pupPage.evaluate(() => {
+        // Access WhatsApp's internal store
+        const Store = window.Store || window.require('WAWebCollections');
+        if (!Store || !Store.Chat) {
+          return { success: false, error: 'Store not available' };
+        }
+        
+        try {
+          const allChats = Store.Chat.getModelsArray();
+          
+          return {
+            success: true,
+            chats: allChats.map(chat => {
+              // Multiple ways to detect group chats for better accuracy
+              const isGroup = chat.isGroup || 
+                             chat.kind === 'group' || 
+                             (chat.id && chat.id._serialized && chat.id._serialized.includes('@g.us')) ||
+                             (chat.id && chat.id.server === 'g.us') ||
+                             false;
+              
+              return {
+                id: chat.id._serialized || chat.id.user + '@c.us',
+                name: chat.name || chat.formattedTitle || chat.contact?.name || 'Unknown',
+                isGroup: isGroup,
+                lastMessageTimestamp: chat.lastReceivedKey ? chat.lastReceivedKey.fromMe ? 
+                  chat.t : chat.lastReceivedKey.t || chat.t : chat.t || 0
+              };
+            })
+          };
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      });
+      
+      if (!chatData.success) {
+        console.error(`[ERROR] Store evaluation failed:`, chatData.error);
+        throw new Error(`Failed to access WhatsApp Store: ${chatData.error}`);
+      }
+      
+      console.log(`[DEBUG] Successfully fetched ${chatData.chats.length} chats using Store`);
+      
+      // Convert to our format
+      chats = chatData.chats.map(c => ({
+        id: { _serialized: c.id },
+        name: c.name,
+        isGroup: c.isGroup,
+        lastMessage: c.lastMessageTimestamp ? { timestamp: c.lastMessageTimestamp } : null
+      }));
+      
+    } catch (storeError) {
+      console.error(`[ERROR] Store method failed:`, storeError.message);
+      console.log(`[DEBUG] Falling back to getChats() method...`);
+      
+      // Fallback to original getChats method
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (attempts < maxAttempts) {
+        try {
+          console.log(`[DEBUG] Attempt ${attempts + 1} to get chats`);
+          chats = await client.getChats();
+          console.log(`[DEBUG] Successfully fetched ${chats.length} total chats`);
+          break;
+        } catch (error) {
+          attempts++;
+          console.error(`[ERROR] Attempt ${attempts} failed:`, error.message);
+          
+          if (attempts >= maxAttempts) {
+            throw new Error(`Both Store and getChats methods failed. WhatsApp Web interface may have changed. Try: 1) Restarting the session, 2) Updating whatsapp-web.js library, 3) Using a different WhatsApp Web version`);
+          }
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+    }
+    
+    if (!chats || !Array.isArray(chats)) {
+      throw new Error('Invalid chats data received');
+    }
+    
+    const now = Date.now();
+    let filteredChats;
+    
+    if (time === 'all') {
+      // Filter out group chats - check both isGroup flag and ID format
+      filteredChats = chats.filter(chat => {
+        try {
+          if (!chat) return false;
+          
+          // Check isGroup flag
+          if (chat.isGroup) return false;
+          
+          // Additional check: group chat IDs end with @g.us
+          const chatId = chat.id?._serialized || '';
+          if (chatId.includes('@g.us')) return false;
+          
+          return true;
+        } catch (e) {
+          console.error(`[ERROR] Error filtering chat:`, e);
+          return false;
+        }
+      });
+      console.log(`[DEBUG] Time filter: all, ${filteredChats.length} non-group chats`);
+    } else {
+      // Convert hours to milliseconds
+      const timeWindow = now - (Number(time) * 60 * 60 * 1000);
+      
+      filteredChats = chats.filter(chat => {
+        try {
+          if (!chat) return false;
+          
+          // Filter out group chats - check both isGroup flag and ID format
+          if (chat.isGroup) return false;
+          
+          // Additional check: group chat IDs end with @g.us
+          const chatId = chat.id?._serialized || '';
+          if (chatId.includes('@g.us')) return false;
+          
+          if (!chat.lastMessage) return false;
+          
+          // WhatsApp timestamp is in seconds, convert to milliseconds
+          const lastMsgTimestamp = chat.lastMessage.timestamp * 1000;
+          return lastMsgTimestamp >= timeWindow;
+        } catch (e) {
+          console.error(`[ERROR] Error filtering chat by time:`, e);
+          return false;
+        }
+      });
+      
+      console.log(`[DEBUG] Time filter: ${time} hours, ${filteredChats.length} chats match`);
+    }
+    
+    return filteredChats.map(chat => {
+      try {
+        return {
+          chatId: chat.id._serialized || chat.id.user + '@c.us',
+          name: chat.name || 'Unknown',
+          lastMessageTime: chat.lastMessage ? chat.lastMessage.timestamp : null
+        };
+      } catch (e) {
+        console.error(`[ERROR] Error mapping chat:`, e);
+        return {
+          chatId: 'error-chat',
+          name: 'Error Chat',
+          lastMessageTime: null
+        };
+      }
+    }).filter(chat => chat.chatId !== 'error-chat');
+    
+  } catch (error) {
+    console.error(`[ERROR] Failed to get chats for client ${clientId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch messages for multiple chats and export as ZIP
+ * @param {string} clientId - Client ID
+ * @param {Array<string>} chatIds - Array of chat IDs to export
+ * @returns {Promise<string>} - Path to the created ZIP file
+ */
+async function fetchMessagesForChat(clientId, chatIds) {
+  const entry = clients.get(clientId);
+  if (!entry) throw new Error('client not found');
+  if (entry.status !== 'ready') throw new Error('client not ready');
+
+  const client = entry.client;
+  const exportId = `export_${Date.now()}`;
+  const exportFolder = path.join(DOWNLOADS_DIR, exportId);
+  
+  // Create main export folder
+  fs.mkdirSync(exportFolder, { recursive: true });
+  
+  console.log(`[DEBUG] Starting export for ${chatIds.length} chats to ${exportFolder}`);
+
+  for (const chatId of chatIds) {
+    try {
+      console.log(`[DEBUG] Processing chat: ${chatId}`);
+      
+      // Create folder for this chat
+      const chatFolder = path.join(exportFolder, chatId.replace(/[^a-zA-Z0-9]/g, '_'));
+      fs.mkdirSync(chatFolder, { recursive: true });
+
+      // Fetch the chat
+      const chat = await client.getChatById(chatId);
+      
+      // Fetch messages (adjust limit as needed)
+      const messages = await chat.fetchMessages({ limit: 10000 });
+      console.log(`[DEBUG] Fetched ${messages.length} messages for chat ${chatId}`);
+
+      const chatMessages = [];
+      let mediaCount = 0;
+
+      for (const msg of messages) {
+        // Collect message data
+        const messageData = {
+          id: msg.id.id,
+          timestamp: msg.timestamp,
+          body: msg.body,
+          from: msg.from,
+          to: msg.to,
+          fromMe: msg.fromMe,
+          type: msg.type,
+          hasMedia: msg.hasMedia
+        };
+
+        chatMessages.push(messageData);
+
+        // Download media if present
+        if (msg.hasMedia) {
+          try {
+            console.log(`[DEBUG] Downloading media for message ${msg.id.id}`);
+            const media = await msg.downloadMedia();
+            
+            if (media) {
+              const extension = getExtensionFromMime(media.mimetype);
+              const mediaFilename = `${msg.id.id}${extension}`;
+              const mediaPath = path.join(chatFolder, mediaFilename);
+              
+              // Save media file
+              fs.writeFileSync(mediaPath, Buffer.from(media.data, 'base64'));
+              mediaCount++;
+              
+              // Add media reference to message data
+              messageData.mediaFile = mediaFilename;
+            }
+          } catch (mediaError) {
+            console.error(`[ERROR] Failed to download media for message ${msg.id.id}:`, mediaError);
+            messageData.mediaError = 'Failed to download media';
+          }
+        }
+      }
+
+      // Write chat messages to chat.txt
+      const chatTextPath = path.join(chatFolder, 'chat.txt');
+      fs.writeFileSync(chatTextPath, JSON.stringify(chatMessages, null, 2));
+      
+      console.log(`[DEBUG] Exported chat ${chatId}: ${messages.length} messages, ${mediaCount} media files`);
+      
+    } catch (chatError) {
+      console.error(`[ERROR] Failed to process chat ${chatId}:`, chatError);
+      
+      // Create error file in chat folder
+      const errorFolder = path.join(exportFolder, chatId.replace(/[^a-zA-Z0-9]/g, '_'));
+      fs.mkdirSync(errorFolder, { recursive: true });
+      fs.writeFileSync(
+        path.join(errorFolder, 'error.txt'),
+        `Failed to export this chat: ${chatError.message}`
+      );
+    }
+  }
+
+  // Create ZIP archive
+  const zipFilename = `${exportId}.zip`;
+  const zipPath = path.join(DOWNLOADS_DIR, zipFilename);
+  
+  console.log(`[DEBUG] Creating ZIP archive: ${zipPath}`);
+  await createZipArchive(exportFolder, zipPath);
+  
+  // Clean up the temporary export folder
+  try {
+    fs.rmSync(exportFolder, { recursive: true, force: true });
+    console.log(`[DEBUG] Cleaned up temporary folder: ${exportFolder}`);
+  } catch (cleanupError) {
+    console.error(`[ERROR] Failed to cleanup temp folder:`, cleanupError);
+  }
+
+  return {
+    zipFilename,
+    zipPath,
+    downloadUrl: `/downloads/${zipFilename}`,
+    exportedChats: chatIds.length
+  };
+}
+
 module.exports = {
   createClientEntry,
   getClientEntry,
   stopClient,
   deleteClient,
   listClients,
-  sendMessage
+  sendMessage,
+  getChatsAccordingToTime,
+  fetchMessagesForChat
 };

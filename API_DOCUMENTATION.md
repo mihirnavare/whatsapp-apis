@@ -1,7 +1,7 @@
 # WhatsApp Web API Documentation
 
 ## Overview
-This is a RESTful API service that provides WhatsApp Web functionality through the `whatsapp-web.js` library. The service allows you to manage multiple WhatsApp sessions, send messages, and handle media files.
+This is a RESTful API service that provides WhatsApp Web functionality through the `whatsapp-web.js` library. The service allows you to manage multiple WhatsApp sessions, send messages, handle media files, and export chat histories.
 
 ## Base URL
 ```
@@ -230,6 +230,117 @@ Serves uploaded media files from the downloads directory.
 #### Status Codes
 - `200` - File found and served
 - `404` - File not found
+
+---
+
+### 8. Get Chats According to Time
+
+**GET** `/clients/:id/chats`
+
+Retrieves all non-group chats where the last message was sent within a specified time window.
+
+#### Parameters
+- `id` (path) - Client ID
+
+#### Query Parameters
+- `time` (optional) - Time filter in hours (e.g., 1, 24, 48) or "all" for no filter (default: "all")
+
+#### Response
+```json
+{
+  "clientId": "uuid-string",
+  "timeFilter": "24",
+  "totalChats": 5,
+  "chats": [
+    {
+      "chatId": "1234567890@c.us",
+      "name": "John Doe",
+      "lastMessageTime": 1698765432
+    }
+  ]
+}
+```
+
+#### Status Codes
+- `200` - Success
+- `400` - Client not ready
+- `404` - Client not found
+- `500` - Internal server error
+
+#### Example
+```bash
+# Get chats from last 24 hours
+curl "http://localhost:3000/clients/abc-123/chats?time=24"
+
+# Get all chats
+curl "http://localhost:3000/clients/abc-123/chats?time=all"
+```
+
+---
+
+### 9. Export Chat Messages
+
+**POST** `/clients/:id/export-chats`
+
+Exports messages and media from specified chats as a downloadable ZIP file. Each chat is exported to its own folder containing a `chat.txt` file with all messages in JSON format and any associated media files.
+
+#### Parameters
+- `id` (path) - Client ID
+
+#### Request Body
+```json
+{
+  "chatIds": [
+    "1234567890@c.us",
+    "0987654321@c.us"
+  ]
+}
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "exportedChats": 2,
+  "downloadUrl": "/media/export_1698765432123.zip",
+  "zipFilename": "export_1698765432123.zip"
+}
+```
+
+#### Status Codes
+- `200` - Export created successfully
+- `400` - Bad request (missing chatIds or client not ready)
+- `404` - Client not found
+- `500` - Internal server error
+
+#### Example
+```bash
+# Export specific chats
+curl -X POST http://localhost:3000/clients/abc-123/export-chats \
+  -H "Content-Type: application/json" \
+  -d '{"chatIds": ["1234567890@c.us", "0987654321@c.us"]}'
+
+# Download the ZIP file
+curl -O http://localhost:3000/media/export_1698765432123.zip
+```
+
+#### Export Structure
+The ZIP file contains folders for each chat with:
+- `chat.txt` - JSON array of all messages with metadata
+- Media files (images, videos, documents) in original formats
+
+---
+
+## Chat Export Feature
+
+For detailed information about the chat export functionality, see [NEW_API_DOCUMENTATION.md](NEW_API_DOCUMENTATION.md).
+
+**Quick workflow:**
+1. Get chats by time filter: `GET /clients/:id/chats?time=24`
+2. Export selected chats: `POST /clients/:id/export-chats` with chatIds
+3. Download ZIP file from the returned URL
+
+---
 
 ## Error Handling
 
