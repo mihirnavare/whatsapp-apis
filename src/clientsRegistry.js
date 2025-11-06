@@ -392,6 +392,145 @@ async function getChatsAccordingToTime(clientId, time) {
 }
 
 /**
+ * Get chats that have RECEIVED attachments (not just messages) in the given time range
+ * @param {string} clientId - Client ID
+ * @param {number|string} time - Hours (e.g., 1, 24, 48) or "all" for no filter
+ * @returns {Promise<Array>} - Array of chat IDs with received attachments
+ */
+async function getChatsWithReceivedAttachments(clientId, time) {
+  const entry = clients.get(clientId);
+  if (!entry) throw new Error('client not found');
+  if (entry.status !== 'ready') throw new Error('client not ready');
+
+  const client = entry.client;
+  
+  try {
+    console.log(`[DEBUG] Fetching chats with received attachments for client ${clientId}`);
+    
+    // First, get all chats
+    let chats = [];
+    
+    try {
+      const pupPage = client.pupPage;
+      
+      const chatData = await pupPage.evaluate(() => {
+        const Store = window.Store || window.require('WAWebCollections');
+        if (!Store || !Store.Chat) {
+          return { success: false, error: 'Store not available' };
+        }
+        
+        try {
+          const allChats = Store.Chat.getModelsArray();
+          
+          return {
+            success: true,
+            chats: allChats.map(chat => {
+              const isGroup = chat.isGroup || 
+                             chat.kind === 'group' || 
+                             (chat.id && chat.id._serialized && chat.id._serialized.includes('@g.us')) ||
+                             (chat.id && chat.id.server === 'g.us') ||
+                             false;
+              
+              return {
+                id: chat.id._serialized || chat.id.user + '@c.us',
+                name: chat.name || chat.formattedTitle || chat.contact?.name || 'Unknown',
+                isGroup: isGroup,
+                lastMessageTimestamp: chat.lastReceivedKey ? chat.lastReceivedKey.fromMe ? 
+                  chat.t : chat.lastReceivedKey.t || chat.t : chat.t || 0
+              };
+            })
+          };
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      });
+      
+      if (!chatData.success) {
+        throw new Error(`Failed to access WhatsApp Store: ${chatData.error}`);
+      }
+      
+      chats = chatData.chats.map(c => ({
+        id: { _serialized: c.id },
+        name: c.name,
+        isGroup: c.isGroup,
+        lastMessage: c.lastMessageTimestamp ? { timestamp: c.lastMessageTimestamp } : null
+      }));
+      
+    } catch (storeError) {
+      console.log(`[DEBUG] Falling back to getChats() method...`);
+      chats = await client.getChats();
+    }
+    
+    // Filter out group chats
+    const nonGroupChats = chats.filter(chat => {
+      if (!chat) return false;
+      if (chat.isGroup) return false;
+      const chatId = chat.id?._serialized || '';
+      return !chatId.includes('@g.us');
+    });
+    
+    console.log(`[DEBUG] Found ${nonGroupChats.length} non-group chats, checking for received attachments...`);
+    
+    // Calculate time window
+    const now = Date.now();
+    const timeWindow = time === 'all' ? 0 : now - (Number(time) * 60 * 60 * 1000);
+    
+    // Check each chat for received attachments
+    const chatsWithAttachments = [];
+    
+    for (const chat of nonGroupChats) {
+      try {
+        const chatId = chat.id._serialized;
+        const fullChat = await client.getChatById(chatId);
+        
+        // Fetch recent messages (limit to reasonable number for performance)
+        const messages = await fullChat.fetchMessages({ limit: 100 });
+        
+        // Check if any received message has media in the time range
+        const hasReceivedAttachment = messages.some(msg => {
+          // Must be received (not sent by us)
+          if (msg.fromMe) return false;
+          
+          // Must have media
+          if (!msg.hasMedia) return false;
+          
+          // Check time window
+          const msgTimestamp = msg.timestamp * 1000; // Convert to milliseconds
+          if (time !== 'all' && msgTimestamp < timeWindow) return false;
+          
+          return true;
+        });
+        
+        if (hasReceivedAttachment) {
+          // Get count of received attachments
+          const attachmentCount = messages.filter(msg => !msg.fromMe && msg.hasMedia).length;
+          
+          chatsWithAttachments.push({
+            chatId: chatId,
+            name: chat.name || 'Unknown',
+            receivedAttachmentsCount: attachmentCount
+          });
+          
+          console.log(`[DEBUG] Chat ${chatId} has ${attachmentCount} received attachments`);
+        }
+        
+      } catch (chatError) {
+        console.error(`[ERROR] Failed to check chat ${chat.id._serialized}:`, chatError.message);
+        // Continue with next chat
+      }
+    }
+    
+    console.log(`[DEBUG] Found ${chatsWithAttachments.length} chats with received attachments`);
+    
+    return chatsWithAttachments;
+    
+  } catch (error) {
+    console.error(`[ERROR] Failed to get chats with received attachments:`, error);
+    throw error;
+  }
+}
+
+/**
  * Fetch messages for multiple chats and export as ZIP
  * @param {string} clientId - Client ID
  * @param {Array<string>} chatIds - Array of chat IDs to export
@@ -446,8 +585,39 @@ async function fetchMessagesForChat(clientId, chatIds) {
 
         // Download media if present
         if (msg.hasMedia) {
+          // Check if this is a downloadable media type
+          let shouldSkip = false;
+          let skipReason = '';
+          
           try {
-            console.log(`[DEBUG] Downloading media for message ${msg.id.id}`);
+            // Skip unsupported message types (interactive, buttons, polls, etc.)
+            const unsupportedTypes = ['interactive', 'buttons', 'list', 'poll', 'ciphertext', 'list_response', 'buttons_response'];
+            if (unsupportedTypes.includes(msg.type)) {
+              shouldSkip = true;
+              skipReason = `Unsupported media type: ${msg.type}`;
+            }
+            
+            // Additional check: inspect message object for interactive properties
+            if (!shouldSkip && msg._data) {
+              if (msg._data.isInteractive || msg._data.interactiveType) {
+                shouldSkip = true;
+                skipReason = 'Interactive message type detected in _data';
+              }
+              
+              // Check for buttons/list in raw data
+              if (msg._data.type === 'interactive' || msg._data.type === 'buttons' || msg._data.type === 'list') {
+                shouldSkip = true;
+                skipReason = `Interactive type in _data: ${msg._data.type}`;
+              }
+            }
+            
+            if (shouldSkip) {
+              console.log(`[DEBUG] Skipping message ${msg.id.id}: ${skipReason}`);
+              messageData.mediaSkipped = skipReason;
+              continue;
+            }
+            
+            console.log(`[DEBUG] Downloading media (type: ${msg.type}) for message ${msg.id.id}`);
             const media = await msg.downloadMedia();
             
             if (media) {
@@ -461,10 +631,18 @@ async function fetchMessagesForChat(clientId, chatIds) {
               
               // Add media reference to message data
               messageData.mediaFile = mediaFilename;
+              messageData.mimeType = media.mimetype;
             }
           } catch (mediaError) {
-            console.error(`[ERROR] Failed to download media for message ${msg.id.id}:`, mediaError);
-            messageData.mediaError = 'Failed to download media';
+            // Check if it's the "webMediaType is invalid" error
+            const errorMsg = mediaError.message || mediaError.toString();
+            if (errorMsg.includes('webMediaType is invalid') || errorMsg.includes('interactive')) {
+              console.log(`[WARN] Skipping unsupported/interactive media for message ${msg.id.id}`);
+              messageData.mediaSkipped = 'Unsupported interactive media type';
+            } else {
+              console.error(`[ERROR] Failed to download media for message ${msg.id.id}:`, mediaError.message);
+              messageData.mediaError = `Failed to download: ${mediaError.message}`;
+            }
           }
         }
       }
@@ -511,6 +689,169 @@ async function fetchMessagesForChat(clientId, chatIds) {
   };
 }
 
+/**
+ * Fetch ONLY received messages (not sent by us) for multiple chats and export as ZIP
+ * @param {string} clientId - Client ID
+ * @param {Array<string>} chatIds - Array of chat IDs to export
+ * @returns {Promise<Object>} - Export details with download URL
+ */
+async function fetchReceivedMessagesOnly(clientId, chatIds) {
+  const entry = clients.get(clientId);
+  if (!entry) throw new Error('client not found');
+  if (entry.status !== 'ready') throw new Error('client not ready');
+
+  const client = entry.client;
+  const exportId = `export_received_${Date.now()}`;
+  const exportFolder = path.join(DOWNLOADS_DIR, exportId);
+  
+  // Create main export folder
+  fs.mkdirSync(exportFolder, { recursive: true });
+  
+  console.log(`[DEBUG] Starting export of RECEIVED messages only for ${chatIds.length} chats to ${exportFolder}`);
+
+  for (const chatId of chatIds) {
+    try {
+      console.log(`[DEBUG] Processing chat: ${chatId}`);
+      
+      // Create folder for this chat
+      const chatFolder = path.join(exportFolder, chatId.replace(/[^a-zA-Z0-9]/g, '_'));
+      fs.mkdirSync(chatFolder, { recursive: true });
+
+      // Fetch the chat
+      const chat = await client.getChatById(chatId);
+      
+      // Fetch messages (adjust limit as needed)
+      const messages = await chat.fetchMessages({ limit: 10000 });
+      console.log(`[DEBUG] Fetched ${messages.length} total messages for chat ${chatId}`);
+
+      // Filter only received messages (fromMe = false)
+      const receivedMessages = messages.filter(msg => !msg.fromMe);
+      console.log(`[DEBUG] Filtered to ${receivedMessages.length} received messages (excluding sent messages)`);
+
+      const chatMessages = [];
+      let mediaCount = 0;
+
+      for (const msg of receivedMessages) {
+        // Collect message data
+        const messageData = {
+          id: msg.id.id,
+          timestamp: msg.timestamp,
+          body: msg.body,
+          from: msg.from,
+          to: msg.to,
+          fromMe: msg.fromMe, // Will always be false
+          type: msg.type,
+          hasMedia: msg.hasMedia
+        };
+
+        chatMessages.push(messageData);
+
+        // Download media if present
+        if (msg.hasMedia) {
+          // Check if this is a downloadable media type
+          let shouldSkip = false;
+          let skipReason = '';
+          
+          try {
+            // Skip unsupported message types (interactive, buttons, polls, etc.)
+            const unsupportedTypes = ['interactive', 'buttons', 'list', 'poll', 'ciphertext', 'list_response', 'buttons_response'];
+            if (unsupportedTypes.includes(msg.type)) {
+              shouldSkip = true;
+              skipReason = `Unsupported media type: ${msg.type}`;
+            }
+            
+            // Additional check: inspect message object for interactive properties
+            if (!shouldSkip && msg._data) {
+              if (msg._data.isInteractive || msg._data.interactiveType) {
+                shouldSkip = true;
+                skipReason = 'Interactive message type detected in _data';
+              }
+              
+              // Check for buttons/list in raw data
+              if (msg._data.type === 'interactive' || msg._data.type === 'buttons' || msg._data.type === 'list') {
+                shouldSkip = true;
+                skipReason = `Interactive type in _data: ${msg._data.type}`;
+              }
+            }
+            
+            if (shouldSkip) {
+              console.log(`[DEBUG] Skipping message ${msg.id.id}: ${skipReason}`);
+              messageData.mediaSkipped = skipReason;
+              continue;
+            }
+            
+            console.log(`[DEBUG] Downloading media (type: ${msg.type}) for received message ${msg.id.id}`);
+            const media = await msg.downloadMedia();
+            
+            if (media) {
+              const extension = getExtensionFromMime(media.mimetype);
+              const mediaFilename = `${msg.id.id}${extension}`;
+              const mediaPath = path.join(chatFolder, mediaFilename);
+              
+              // Save media file
+              fs.writeFileSync(mediaPath, Buffer.from(media.data, 'base64'));
+              mediaCount++;
+              
+              // Add media reference to message data
+              messageData.mediaFile = mediaFilename;
+              messageData.mimeType = media.mimetype;
+            }
+          } catch (mediaError) {
+            // Check if it's the "webMediaType is invalid" error
+            const errorMsg = mediaError.message || mediaError.toString();
+            if (errorMsg.includes('webMediaType is invalid') || errorMsg.includes('interactive')) {
+              console.log(`[WARN] Skipping unsupported/interactive media for message ${msg.id.id}`);
+              messageData.mediaSkipped = 'Unsupported interactive media type';
+            } else {
+              console.error(`[ERROR] Failed to download media for message ${msg.id.id}:`, mediaError.message);
+              messageData.mediaError = `Failed to download: ${mediaError.message}`;
+            }
+          }
+        }
+      }
+
+      // Write chat messages to chat.txt
+      const chatTextPath = path.join(chatFolder, 'chat.txt');
+      fs.writeFileSync(chatTextPath, JSON.stringify(chatMessages, null, 2));
+      
+      console.log(`[DEBUG] Exported received messages for chat ${chatId}: ${receivedMessages.length} messages (from ${messages.length} total), ${mediaCount} media files`);
+      
+    } catch (chatError) {
+      console.error(`[ERROR] Failed to process chat ${chatId}:`, chatError);
+      
+      // Create error file in chat folder
+      const errorFolder = path.join(exportFolder, chatId.replace(/[^a-zA-Z0-9]/g, '_'));
+      fs.mkdirSync(errorFolder, { recursive: true });
+      fs.writeFileSync(
+        path.join(errorFolder, 'error.txt'),
+        `Failed to export this chat: ${chatError.message}`
+      );
+    }
+  }
+
+  // Create ZIP archive
+  const zipFilename = `${exportId}.zip`;
+  const zipPath = path.join(DOWNLOADS_DIR, zipFilename);
+  
+  console.log(`[DEBUG] Creating ZIP archive: ${zipPath}`);
+  await createZipArchive(exportFolder, zipPath);
+  
+  // Clean up the temporary export folder
+  try {
+    fs.rmSync(exportFolder, { recursive: true, force: true });
+    console.log(`[DEBUG] Cleaned up temporary folder: ${exportFolder}`);
+  } catch (cleanupError) {
+    console.error(`[ERROR] Failed to cleanup temp folder:`, cleanupError);
+  }
+
+  return {
+    zipFilename,
+    zipPath,
+    downloadUrl: `/downloads/${zipFilename}`,
+    exportedChats: chatIds.length
+  };
+}
+
 module.exports = {
   createClientEntry,
   getClientEntry,
@@ -519,5 +860,7 @@ module.exports = {
   listClients,
   sendMessage,
   getChatsAccordingToTime,
-  fetchMessagesForChat
+  fetchMessagesForChat,
+  fetchReceivedMessagesOnly,
+  getChatsWithReceivedAttachments
 };

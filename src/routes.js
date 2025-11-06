@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createClientEntry, getClientEntry, stopClient, deleteClient, listClients, sendMessage, getChatsAccordingToTime, fetchMessagesForChat } = require('./clientsRegistry');
+const { createClientEntry, getClientEntry, stopClient, deleteClient, listClients, sendMessage, getChatsAccordingToTime, fetchMessagesForChat, fetchReceivedMessagesOnly, getChatsWithReceivedAttachments } = require('./clientsRegistry');
 const { saveBase64ToFile, DOWNLOADS_DIR } = require('./utils');
 const path = require('path');
 const fs = require('fs');
@@ -224,6 +224,36 @@ router.get('/clients/:id/chats', async (req, res) => {
   }
 });
 
+// GET /clients/:id/chats-with-received-attachments
+// Query params: time (hours or "all")
+// Returns only chats where attachments (media) were RECEIVED (not sent by us)
+router.get('/clients/:id/chats-with-received-attachments', async (req, res) => {
+  const { id } = req.params;
+  const time = req.query.time || 'all';
+  
+  try {
+    const entry = getClientEntry(id);
+    if (!entry) return res.status(404).json({ error: 'client not found' });
+    if (entry.status !== 'ready') {
+      return res.status(400).json({ error: 'client not ready', status: entry.status });
+    }
+    
+    console.log(`[DEBUG] Fetching chats with received attachments for time: ${time}`);
+    const chats = await getChatsWithReceivedAttachments(id, time);
+    
+    return res.json({
+      clientId: id,
+      timeFilter: time,
+      totalChats: chats.length,
+      chats,
+      note: 'Only chats with received attachments (media sent to you) are included'
+    });
+  } catch (e) {
+    console.error('[ERROR] Get chats with received attachments error:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /clients/:id/export-chats
 // Body: { chatIds: ["123@c.us", "456@c.us"] }
 router.post('/clients/:id/export-chats', async (req, res) => {
@@ -252,6 +282,40 @@ router.post('/clients/:id/export-chats', async (req, res) => {
     });
   } catch (e) {
     console.error('[ERROR] Export chats error:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /clients/:id/export-received-messages
+// Body: { chatIds: ["123@c.us", "456@c.us"] }
+// Exports ONLY received messages (not sent by us) with their media
+router.post('/clients/:id/export-received-messages', async (req, res) => {
+  const { id } = req.params;
+  const { chatIds } = req.body;
+  
+  if (!chatIds || !Array.isArray(chatIds) || chatIds.length === 0) {
+    return res.status(400).json({ error: 'chatIds array required' });
+  }
+  
+  try {
+    const entry = getClientEntry(id);
+    if (!entry) return res.status(404).json({ error: 'client not found' });
+    if (entry.status !== 'ready') {
+      return res.status(400).json({ error: 'client not ready', status: entry.status });
+    }
+    
+    console.log(`[DEBUG] Starting export of RECEIVED messages only for ${chatIds.length} chats`);
+    const result = await fetchReceivedMessagesOnly(id, chatIds);
+    
+    return res.json({
+      success: true,
+      exportedChats: result.exportedChats,
+      downloadUrl: result.downloadUrl,
+      zipFilename: result.zipFilename,
+      note: 'Only received messages (not sent by you) are included in this export'
+    });
+  } catch (e) {
+    console.error('[ERROR] Export received messages error:', e);
     return res.status(500).json({ error: e.message });
   }
 });
