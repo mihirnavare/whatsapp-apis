@@ -7,6 +7,23 @@ const cron = require('node-cron');
 const fs = require('fs/promises');
 const fsSync = require('fs');
 
+// Global error handlers to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[CRITICAL] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit the process, just log the error
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[CRITICAL] Uncaught Exception:', error);
+  // Don't exit the process for WhatsApp client errors
+  if (error.message && error.message.includes('Execution context was destroyed')) {
+    console.log('[WARN] WhatsApp client navigation error, continuing...');
+  } else {
+    // For other critical errors, you might want to exit
+    console.error('[CRITICAL] Fatal error, but keeping server alive');
+  }
+});
+
 const app = express();
 
 // CORS configuration
@@ -41,7 +58,17 @@ if (!fsSync.existsSync(DOWNLOADS_DIR)) {
 }
 
 // Simple periodic cleanup to remove expired client entries
-const { listClients, stopClient, getClientEntry } = require('./clientsRegistry');
+const { listClients, stopClient, getClientEntry, reconnectPersistedClients } = require('./clientsRegistry');
+
+// Reconnect to persisted clients on startup
+(async () => {
+  try {
+    console.log('[INFO] Reconnecting to persisted clients...');
+    await reconnectPersistedClients();
+  } catch (error) {
+    console.error('[ERROR] Failed to reconnect persisted clients:', error);
+  }
+})();
 
 setInterval(async () => {
   try {

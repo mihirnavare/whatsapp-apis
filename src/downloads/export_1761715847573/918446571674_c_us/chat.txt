@@ -1,0 +1,166 @@
+[
+  {
+    "id": "3EB0E40960ADA385020876",
+    "timestamp": 1740470190,
+    "body": "Sorry, could not complete your request.\nReason: All attempts exhausted or queries failed.",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "chat",
+    "hasMedia": false
+  },
+  {
+    "id": "3EB0345A0381FFF20C8936",
+    "timestamp": 1740470294,
+    "body": "\"Find all listings that are marked as 'Entire home/apt', have a cleaning fee less than $200, and include both 'Kitchen' and 'Hot tub' in their amenities.\"",
+    "from": "918767256205@c.us",
+    "to": "918446571674@c.us",
+    "fromMe": true,
+    "type": "chat",
+    "hasMedia": false
+  },
+  {
+    "id": "3EB077D47849386A91D348",
+    "timestamp": 1740470306,
+    "body": "Sorry, could not complete your request.\nReason: All attempts exhausted or queries failed.",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "chat",
+    "hasMedia": false
+  },
+  {
+    "id": "03D30A21FC3E3EA29D221DEE98340057",
+    "timestamp": 1740470633,
+    "body": "\"Find all listings that are marked as 'Entire home/apt', have a cleaning fee less than $200, and include both 'Kitchen' and 'Hot tub' in their amenities.\"",
+    "from": "918767256205@c.us",
+    "to": "918446571674@c.us",
+    "fromMe": true,
+    "type": "chat",
+    "hasMedia": false
+  },
+  {
+    "id": "3EB0298B27E94DC8337F63",
+    "timestamp": 1740470685,
+    "body": "Here are some listings that match your criteria of being marked as \"Entire home/apt\", having a cleaning fee of less than $200, and including both \"Kitchen\" and \"Hot tub\" in their amenities:\n\n### Listing 1: Horto flat with small garden\n- **Location**: Rio de Janeiro, Brazil\n- **Price**: $317.00 per night\n- **Cleaning Fee**: $187.00\n- **Amenities**: Kitchen, Hot tub, Wifi, Free parking on premises, Family/kid friendly, Washer, Hair dryer, Iron, and more.\n- **Summary**: A charming one-bedroom flat located in a quiet neighborhood near the Botanical Garden, featuring a small garden and easy access to transport and local amenities.\n- **Link**: [View Listing](https://www.airbnb.com/rooms/10009999)\n\n### Listing 2: Ocean View Waikiki Marina w/prkg\n- **Location**: Honolulu, Hawaii, United States\n- **Price**: $115.00 per night\n- **Cleaning Fee**: $100.00\n- **Amenities**: Kitchen, Hot tub, Pool, Wifi, Air conditioning, Free parking on premises, and more.\n- **Summary**: A studio located near Waikiki, offering ocean views and easy access to shopping and dining. Ideal for business or leisure stays.\n- **Link**: [View Listing](https://www.airbnb.com/rooms/1001265)\n\n### Listing 3: Resort-like living in Williamsburg\n- **Location**: Brooklyn, New York, United States\n- **Price**: $220.00 per night\n- **Cleaning Fee**: $25.00\n- **Amenities**: Kitchen, Hot tub, Pool, Gym, Wifi, and more.\n- **Summary**: A modern apartment in a new building with a doorman, jacuzzi, gym, and pool, just a short walk from the subway.\n- **Link**: [View Listing](https://www.airbnb.com/rooms/10166986)\n\n### Listing 4: Lahaina, Maui! Resort/Condo Beachfront\n- **Location**: Lahaina, Maui, Hawaii, United States\n- **Price**: $499.00 per night\n- **Cleaning Fee**: $99.00\n- **Amenities**: Kitchen, Hot tub, Pool, Wifi, and more.\n- **Summary**: A spacious one-bedroom condo located on the beach in Lahaina, perfect for families or groups.\n- **Link**: [View Listing](https://www.airbnb.com/rooms/10227000)\n\n### Listing 5: Beautiful flat with services\n- **Location**: Ipanema, Rio de Janeiro, Brazil\n- **Price**: $351.00 per night\n- **Cleaning Fee**: $120.00\n- **Amenities**: Kitchen, Hot tub, Pool, Gym, Wifi, and more.\n- **Summary**: An excellent apartment with cleaning service and 24-hour security, located in the heart of Ipanema, close to the beach.\n- **Link**: [View Listing](https://www.airbnb.com/rooms/10411341)\n\nIf you need more details or additional listings, please let me know!",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "chat",
+    "hasMedia": false
+  },
+  {
+    "id": "EF2B7DFEFC65D9BBD0E349E853E44FA3",
+    "timestamp": 1741579364,
+    "body": "TBH-Pune-Participant-Deck.pdf",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "document",
+    "hasMedia": true
+  },
+  {
+    "id": "77E96101A1AF5BDE8D9BCF7BBD7F493D",
+    "timestamp": 1741579365,
+    "body": "TBH-Pune-Participant-Deck.pdf",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "document",
+    "hasMedia": true
+  },
+  {
+    "id": "CA2067D1BE157D4EE407B5E50E1EC87D",
+    "timestamp": 1741579365,
+    "body": "TBH-Pune-Participant-Deck.pdf",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "document",
+    "hasMedia": true
+  },
+  {
+    "id": "CE2E5130EB54EC8638CCA296B0F48DF1",
+    "timestamp": 1741579365,
+    "body": "",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "image",
+    "hasMedia": true
+  },
+  {
+    "id": "AED3AB8E98B8706D7349AD69497868DC",
+    "timestamp": 1750660661,
+    "body": "After the massive success of BNB AI Hack Delhi, we are coming to Bombay with double the energy and innovation!\n\n💫 *BNB AI Hack | Bombay Edition |  26-27 July 2025* 💫\n \nBNB AI Hack is now bigger than ever — covering AI, DeSoc, DeSci & DePIN.\n 🏆 *Prizes and support worth $100K+ up for grabs* \n                                   \n\n👩‍💻 *Tracks:* AI | DeSoc | DeSci | DePIN\n👨‍💻 *Who can join*: Students | Devs | AI/ML Engineers | Startups | Designers\n\n✨ *What’s onsite:* BNB Goodies, great food, mentorship, networking with top experts and builders.\n\n*Tech stack:* BNB Smart Chain, opBNB, BNB Greenfield\n\nApply Now:  https://lu.ma/eh5zbws2\nLet’s build the future together. 🤝",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "image",
+    "hasMedia": true
+  },
+  {
+    "id": "3EB07618AA11FC89FF0092",
+    "timestamp": 1760809796,
+    "body": "Hello from Streamlit + WhatsApp!",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "image",
+    "hasMedia": true,
+    "mediaFile": "3EB07618AA11FC89FF0092.jpeg"
+  },
+  {
+    "id": "3EB0EE76EB29E6AAFD7B71",
+    "timestamp": 1760810128,
+    "body": "Hello from Streamlit + WhatsApp!",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "image",
+    "hasMedia": true,
+    "mediaFile": "3EB0EE76EB29E6AAFD7B71.jpeg"
+  },
+  {
+    "id": "3EB0995D11B6120DC78422",
+    "timestamp": 1761637613,
+    "body": "🏦 *Required Documents for NOI E-Filing*\nLoan A/c / App No: TBMUM00007584354\nLoan Amount: 3100000\nProperty Address: B 109 ANNAPURNA$NAGAR OMKAR$CHSL NAVGHAR RD$BHAYANDAR EAST\n\nDear GANESH MAHADEV RATATE,\n\nWe have received your payment for Stamp Duty and Notice of Intimation (NOI).\n\nICICI Bank has appointed Anulom Technologies Pvt. Ltd. to facilitate your NOI e-filing.\n*Please note that NOI filing is mandatory for all mortgage properties in Maharashtra and must be completed within 30 days of the mortgage.*\n\n📌 To initiate the e-filing process, kindly share the following documents at the earliest:\n📄 Aadhaar & PAN (Applicant & Co-applicant)\n📄 Property Index II\n📄 Loan Sanction Letter\n📄 Photos\n📄 Welcome Letter / First Disbursement Confirmation\n\n📤 You can upload your documents directly using this link: \n👉 nan\n\nOr you may send these documents via WhatsApp to this number\nor email them to 📧 noisupport@anulom.com\n\nWhile sending the email or WhatsApp message, please mention your loan application number.\n\n✅ Thank You!\nAnulom Technologies Pvt. Ltd.",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "chat",
+    "hasMedia": false
+  },
+  {
+    "id": "3EB0B68196892384415A5E",
+    "timestamp": 1761645362,
+    "body": "🏦 *Required Documents for NOI E-Filing*\nLoan A/c / App No: 77212264900\nLoan Amount: 7800000\nProperty Address: FL NO 0331002$TOWER NO 33$TRENDY TOWERS$AMANORA PARK\n\nDear HIMANSHU MUKATI,\n\nWe have received your payment for Stamp Duty and Notice of Intimation (NOI).\n\nICICI Bank has appointed Anulom Technologies Pvt. Ltd. to facilitate your NOI e-filing.\n*Please note that NOI filing is mandatory for all mortgage properties in Maharashtra and must be completed within 30 days of the mortgage.*\n\n📌 To initiate the e-filing process, kindly share the following documents at the earliest:\n📄 Aadhaar & PAN (Applicant & Co-applicant)\n📄 Property Index II\n📄 Loan Sanction Letter\n📄 Photos\n📄 Welcome Letter / First Disbursement Confirmation\n\n📤 You can upload your documents directly using this link: \n👉 nan\n\nOr you may send these documents via WhatsApp to this number\nor email them to 📧 noisupport@anulom.com\n\nWhile sending the email or WhatsApp message, please mention your loan application number.\n\n✅ Thank You!\nAnulom Technologies Pvt. Ltd.",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "image",
+    "hasMedia": true,
+    "mediaFile": "3EB0B68196892384415A5E.jpeg"
+  },
+  {
+    "id": "3EB03EB56AE2F65239DF8F",
+    "timestamp": 1761646232,
+    "body": "🏦 *Required Documents for NOI E-Filing*\nLoan A/c / App No: 77212264900\nLoan Amount: 7800000\nProperty Address: FL NO 0331002$TOWER NO 33$TRENDY TOWERS$AMANORA PARK\n\nDear HIMANSHU MUKATI,\n\nWe have received your payment for Stamp Duty and Notice of Intimation (NOI).\n\nICICI Bank has appointed Anulom Technologies Pvt. Ltd. to facilitate your NOI e-filing.\n*Please note that NOI filing is mandatory for all mortgage properties in Maharashtra and must be completed within 30 days of the mortgage.*\n\n📌 To initiate the e-filing process, kindly share the following documents at the earliest:\n📄 Aadhaar & PAN (Applicant & Co-applicant)\n📄 Property Index II\n📄 Loan Sanction Letter\n📄 Photos\n📄 Welcome Letter / First Disbursement Confirmation\n\n📤 You can upload your documents directly using this link: \n👉 https://icici-mortgage.anulom.com/v1/service_requests/share_url?type=7&service_request_id=Y8lnZFMmwIgj4HBv4Z2G2w==\n\nOr you may send these documents via WhatsApp to this number\nor email them to 📧 noisupport@anulom.com\n\nWhile sending the email or WhatsApp message, please mention your loan application number.\n\n✅ Thank You!\nAnulom Technologies Pvt. Ltd.",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "image",
+    "hasMedia": true,
+    "mediaFile": "3EB03EB56AE2F65239DF8F.jpeg"
+  },
+  {
+    "id": "A51D0EE50CA707C21927D44A4D4F3430",
+    "timestamp": 1761715622,
+    "body": "Hi",
+    "from": "918446571674@c.us",
+    "to": "918767256205@c.us",
+    "fromMe": false,
+    "type": "chat",
+    "hasMedia": false
+  }
+]

@@ -106,10 +106,14 @@ dist
 # WhatsApp Web.js specific files
 .wwebjs_auth/
 .wwebjs_cache/
+wwebjs_auth/*
+!wwebjs_auth/.gitkeep
 
 # Downloads and temporary files
-downloads/
-data/
+downloads/*
+!downloads/.gitkeep
+data/*
+!data/.gitkeep
 temp/
 tmp/
 
@@ -122,7 +126,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
+# downloads/ - commented out, using downloads/* above for WhatsApp
 eggs/
 .eggs/
 lib/

@@ -8,6 +8,7 @@ const { getExtensionFromMime, createZipArchive } = require('./utils');
 
 const DATA_DIR = path.resolve(process.cwd(), 'data'); // volume mounted to persist LocalAuth
 const DOWNLOADS_DIR = path.resolve(process.cwd(), 'src', 'downloads');
+const REGISTRY_FILE = path.join(DATA_DIR, 'clients-registry.json'); // Persist client metadata
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(DOWNLOADS_DIR)) fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
@@ -19,6 +20,42 @@ if (!fs.existsSync(DOWNLOADS_DIR)) fs.mkdirSync(DOWNLOADS_DIR, { recursive: true
   }
 */
 const clients = new Map();
+
+// Helper functions for persistence
+function saveRegistry() {
+  try {
+    const data = {};
+    for (const [clientId, entry] of clients.entries()) {
+      // Save only serializable data, not the client instance
+      data[clientId] = {
+        clientId: entry.clientId,
+        owner: entry.owner,
+        status: entry.status,
+        createdAt: entry.createdAt,
+        expiresAt: entry.expiresAt,
+        lastSeen: entry.lastSeen,
+        qrDataUrl: entry.qrDataUrl
+      };
+    }
+    fs.writeFileSync(REGISTRY_FILE, JSON.stringify(data, null, 2));
+    console.log(`[DEBUG] Registry saved with ${Object.keys(data).length} clients`);
+  } catch (error) {
+    console.error('[ERROR] Failed to save registry:', error);
+  }
+}
+
+function loadRegistry() {
+  try {
+    if (fs.existsSync(REGISTRY_FILE)) {
+      const data = JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf8'));
+      console.log(`[INFO] Loading ${Object.keys(data).length} persisted clients...`);
+      return data;
+    }
+  } catch (error) {
+    console.error('[ERROR] Failed to load registry:', error);
+  }
+  return {};
+}
 
 function createClientEntry(owner, expiryMs) {
   const clientId = uuidv4();
@@ -77,6 +114,7 @@ function createClientEntry(owner, expiryMs) {
       entry.status = 'qr';
       entry.lastSeen = Date.now();
       console.log(`[DEBUG] QR code generated and stored for client ${clientId}`);
+      saveRegistry(); // Save when status changes
     } catch (e) {
       console.error('[ERROR] QR to data url error', e);
     }
@@ -87,29 +125,53 @@ function createClientEntry(owner, expiryMs) {
     entry.qrDataUrl = null;
     entry.lastSeen = Date.now();
     console.log(`[DEBUG] Client ${clientId} ready`);
+    saveRegistry(); // Save when ready
   });
 
   client.on('authenticated', () => {
     entry.status = 'authenticated';
     entry.lastSeen = Date.now();
     console.log(`[DEBUG] Client ${clientId} authenticated`);
+    saveRegistry(); // Save when authenticated
   });
 
   client.on('auth_failure', (msg) => {
     console.warn(`[WARN] Auth failure for client ${clientId}:`, msg);
     entry.status = 'auth_failure';
     entry.lastSeen = Date.now();
+    saveRegistry(); // Save when auth fails
   });
 
-  client.on('disconnected', (reason) => {
+  client.on('disconnected', async (reason) => {
     console.log(`[DEBUG] Client ${clientId} disconnected:`, reason);
     entry.status = 'disconnected';
     entry.lastSeen = Date.now();
+    
+    // If client was logged out, clean it up gracefully
+    if (reason === 'LOGOUT') {
+      console.log(`[INFO] Client ${clientId} logged out, cleaning up...`);
+      try {
+        await client.destroy();
+        clients.delete(clientId);
+        console.log(`[INFO] Client ${clientId} cleaned up after logout`);
+      } catch (cleanupError) {
+        console.error(`[ERROR] Failed to cleanup client ${clientId}:`, cleanupError);
+      }
+    }
   });
 
   // Capture any unhandled errors from the client
   client.on('error', (error) => {
     console.error(`[ERROR] Client ${clientId} error:`, error);
+    // Don't let client errors crash the server
+    try {
+      if (error.message && error.message.includes('Execution context was destroyed')) {
+        console.log(`[WARN] Client ${clientId} execution context destroyed, marking as disconnected`);
+        entry.status = 'disconnected';
+      }
+    } catch (e) {
+      console.error(`[ERROR] Error handling client error:`, e);
+    }
   });
 
   // Listen for remote_session_saved event
@@ -131,6 +193,7 @@ function createClientEntry(owner, expiryMs) {
     console.error(`[ERROR] Failed to initialize client ${clientId}:`, e);
   }
   clients.set(clientId, entry);
+  saveRegistry(); // Save after adding new client
   return entry;
 }
 
@@ -147,6 +210,7 @@ async function stopClient(clientId) {
     console.error('Error destroying client', e);
   }
   clients.delete(clientId);
+  saveRegistry(); // Save after removing client
 
   // Attempt to remove LocalAuth folder
   const authPath = path.join(DATA_DIR, clientId);
@@ -852,6 +916,145 @@ async function fetchReceivedMessagesOnly(clientId, chatIds) {
   };
 }
 
+/**
+ * Reconnect to persisted clients on server startup
+ */
+async function reconnectPersistedClients() {
+  const persistedClients = loadRegistry();
+  const now = Date.now();
+  
+  for (const [clientId, metadata] of Object.entries(persistedClients)) {
+    try {
+      // Skip expired clients
+      if (metadata.expiresAt && metadata.expiresAt < now) {
+        console.log(`[INFO] Skipping expired client ${clientId}`);
+        continue;
+      }
+      
+      // Check if LocalAuth session exists
+      const wwebjsAuthPath = path.join(process.cwd(), '.wwebjs_auth', 'session-' + clientId);
+      if (!fs.existsSync(wwebjsAuthPath)) {
+        console.log(`[WARN] No session found for client ${clientId}, skipping reconnection`);
+        continue;
+      }
+      
+      console.log(`[INFO] Reconnecting client ${clientId}...`);
+      
+      // Recreate the client with same ID
+      const client = new Client({
+        authStrategy: new LocalAuth({ clientId }),
+        puppeteer: {
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--disable-gpu'
+          ],
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+          timeout: 60000
+        },
+        takeoverOnConflict: true,
+        webVersionCache: {
+          type: 'remote',
+          remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
+        }
+      });
+      
+      const entry = {
+        client,
+        clientId,
+        owner: metadata.owner,
+        status: 'reconnecting',
+        createdAt: metadata.createdAt,
+        expiresAt: metadata.expiresAt,
+        qrDataUrl: null,
+        lastSeen: Date.now()
+      };
+      
+      // Set up event handlers (same as createClientEntry)
+      client.on('qr', async (qr) => {
+        console.log(`[DEBUG] QR event for reconnected client ${clientId}`);
+        try {
+          const dataUrl = await qrcode.toDataURL(qr);
+          entry.qrDataUrl = dataUrl;
+          entry.status = 'qr';
+          entry.lastSeen = Date.now();
+          saveRegistry();
+        } catch (e) {
+          console.error('[ERROR] QR error', e);
+        }
+      });
+      
+      client.on('ready', () => {
+        entry.status = 'ready';
+        entry.qrDataUrl = null;
+        entry.lastSeen = Date.now();
+        console.log(`[INFO] Client ${clientId} reconnected successfully`);
+        saveRegistry();
+      });
+      
+      client.on('authenticated', () => {
+        entry.status = 'authenticated';
+        entry.lastSeen = Date.now();
+        saveRegistry();
+      });
+      
+      client.on('auth_failure', (msg) => {
+        console.warn(`[WARN] Reconnect auth failure for ${clientId}:`, msg);
+        entry.status = 'auth_failure';
+        entry.lastSeen = Date.now();
+        saveRegistry();
+      });
+      
+      client.on('disconnected', async (reason) => {
+        console.log(`[DEBUG] Reconnected client ${clientId} disconnected:`, reason);
+        entry.status = 'disconnected';
+        entry.lastSeen = Date.now();
+        
+        if (reason === 'LOGOUT') {
+          console.log(`[INFO] Client ${clientId} logged out during reconnect`);
+          try {
+            await client.destroy();
+            clients.delete(clientId);
+            saveRegistry();
+          } catch (e) {
+            console.error(`[ERROR] Cleanup error:`, e);
+          }
+        }
+      });
+      
+      client.on('error', (error) => {
+        console.error(`[ERROR] Reconnected client ${clientId} error:`, error);
+        try {
+          if (error.message && error.message.includes('Execution context was destroyed')) {
+            entry.status = 'disconnected';
+          }
+        } catch (e) {
+          console.error(`[ERROR] Error handler error:`, e);
+        }
+      });
+      
+      clients.set(clientId, entry);
+      
+      // Initialize the client
+      try {
+        await client.initialize();
+        console.log(`[INFO] Client ${clientId} initialization started`);
+      } catch (e) {
+        console.error(`[ERROR] Failed to initialize ${clientId}:`, e);
+      }
+      
+    } catch (error) {
+      console.error(`[ERROR] Failed to reconnect client ${clientId}:`, error);
+    }
+  }
+  
+  console.log(`[INFO] Reconnection complete. Active clients: ${clients.size}`);
+}
+
 module.exports = {
   createClientEntry,
   getClientEntry,
@@ -862,5 +1065,6 @@ module.exports = {
   getChatsAccordingToTime,
   fetchMessagesForChat,
   fetchReceivedMessagesOnly,
-  getChatsWithReceivedAttachments
+  getChatsWithReceivedAttachments,
+  reconnectPersistedClients
 };
